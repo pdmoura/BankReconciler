@@ -1,0 +1,4 @@
+id_transacao,data_processamento,valor_processado,descricao
+PIX-E001-20240115-A10,2024-01-15,150.50,Venda Loja A
+BOL-3490-20240115-B20,2024-01-15,1190.00,Venda Loja B (Erro: Valor menor q Banco)
+TX001,2024-01-10,100.00, Venda Loja C 

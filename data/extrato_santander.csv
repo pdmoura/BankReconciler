@@ -1,0 +1,4 @@
+id_transacao,data_processamento,valor_processado,descricao
+TX001,2024-01-10,100.00, Venda Loja C 
+TX002,2024-01-10,250.00, Venda Loja D
+TX004,2024-01-11,80.00, Venda Loja D
