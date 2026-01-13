@@ -19,40 +19,65 @@ except Exception as e:
     print(f"❌ Erro de conexão: {e}")
     exit()
 
+def processar_conciliacao(df_banco, df_csv):
+    """
+    Função Pura: Recebe DataFrames, aplica regras de negócio e retorna o resultado.
+    Isolada para facilitar os testes unitários.
+    """
+    # Cruzamento de dados (Outer Join)
+    df_final = pd.merge(df_banco, df_csv, on='id_transacao', how='outer', indicator=True)
+    
+    # Regra de Negócio
+    df_final['status'] = df_final.apply(lambda row: 
+        'FALTA NO ARQUIVO' if row['_merge'] == 'left_only' else 
+        ('NAO NO BANCO' if row['_merge'] == 'right_only' else 
+        ('DIVERGENCIA' if row['valor_banco'] != row['valor_arquivo'] else 'OK')), axis=1)
+        
+    return df_final
+
 def executar_conciliacao(caminho_csv, nome_job):
     print(f"🔄 Executando: {nome_job}...")
     try:
         with engine.connect() as conn:
+
             df_banco = pd.read_sql("SELECT id_transacao, valor as valor_banco FROM transacoes_internas", conn)
         
-        if not os.path.exists(caminho_csv): return print("Arquivo não encontrado.")
+        if not os.path.exists(caminho_csv): 
+            return print("Arquivo não encontrado.")
         
         df_csv = pd.read_csv(caminho_csv)
         df_csv.rename(columns={'valor_processado': 'valor_arquivo'}, inplace=True)
 
-        # Cruzamento de dados
-        df_final = pd.merge(df_banco, df_csv, on='id_transacao', how='outer', indicator=True)
-        
-        # Regra de Negócio
-        df_final['status'] = df_final.apply(lambda row: 
-            'FALTA NO ARQUIVO' if row['_merge'] == 'left_only' else 
-            ('NAO NO BANCO' if row['_merge'] == 'right_only' else 
-            ('DIVERGENCIA' if row['valor_banco'] != row['valor_arquivo'] else 'OK')), axis=1)
+        df_final = processar_conciliacao(df_banco, df_csv)
 
+        df_final['data_execucao'] = datetime.now()
+
+        # 1. SALVAR EXCEL (Backup local / Visualização)
         timestamp = datetime.now().strftime("%H%M%S")
+        os.makedirs("output", exist_ok=True) # Garante que a pasta existe
         df_final.to_excel(f"output/{nome_job}_{timestamp}.xlsx", index=False)
-        print(f"✅ Relatório gerado em output/")
+        
+        # 2. SALVAR NO SUPABASE (Persistência e Histórico)
+        df_final_db = df_final.drop(columns=['_merge']) 
+        df_final_db.to_sql('historico_conciliacoes', engine, if_exists='append', index=False)
 
-    except Exception as e: print(f"❌ Erro: {e}")
+        print(f"✅ Relatório gerado em output/ e salvo no Supabase!")
+
+    except Exception as e: 
+        print(f"❌ Erro durante a execução: {e}")
 
 def iniciar():
     schedule.clear()
-    with engine.connect() as conn:
-        jobs = conn.execute(text("SELECT nome_job, caminho_arquivo FROM configuracoes_robo WHERE ativo = TRUE")).fetchall()
-    
-    for job in jobs:
-        schedule.every(10).seconds.do(executar_conciliacao, caminho_csv=job[1], nome_job=job[0])
-        print(f"📅 Agendado: {job[0]}")
+    try:
+        with engine.connect() as conn:
+            jobs = conn.execute(text("SELECT nome_job, caminho_arquivo FROM configuracoes_robo WHERE ativo = TRUE")).fetchall()
+        
+        for job in jobs:
+            schedule.every(10).seconds.do(executar_conciliacao, caminho_csv=job[1], nome_job=job[0])
+            print(f"📅 Agendado: {job[0]}")
+            
+    except Exception as e:
+        print(f"❌ Erro ao buscar configurações: {e}")
 
 if __name__ == "__main__":
     iniciar()
