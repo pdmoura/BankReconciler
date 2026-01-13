@@ -1,12 +1,21 @@
 # 🏦 BankReconciler - Sistema de Conciliação Financeira Automatizada
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Pytest](https://img.shields.io/badge/Tests-Passing-green)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-green)
 ![Pandas](https://img.shields.io/badge/Pandas-ETL-orange)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 
-## 📌 Visão Geral do Projeto
-O **BankReconciler** é uma solução de automação de Backoffice desenvolvida para resolver um dos gargalos mais críticos em operações financeiras: a **conciliação de transações**.
+## 📌 Sobre o Projeto
+
+Este projeto simula uma rotina real de **Backoffice Bancário**: a conciliação financeira. O objetivo foi criar uma ferramenta que automatiza o cruzamento de dados entre um Core Banking (simulado aqui com PostgreSQL) e arquivos externos de adquirentes, eliminando a conferência manual.
+
+A principal decisão de arquitetura foi tornar o sistema **Database-Driven**. Ao invés de deixar os horários e nomes de arquivos fixos no código Python ("hardcoded"), criei uma tabela de configuração no banco. Isso permite que novas rotinas de conciliação sejam cadastradas ou pausadas via SQL, sem precisar fazer um novo deploy da aplicação.
+
+### O que o projeto resolve?
+* **Elimina trabalho manual:** Processa milhares de linhas em segundos usando Pandas.
+* **Garante integridade:** Usa transações ACID e tipos de dados decimais para evitar erros de arredondamento financeiro.
+* **Auditoria:** Gera relatórios detalhados apontando exatamente onde estão as divergências de centavos ou registros faltantes.
 
 A ferramenta atua comparando registros internos (simulando um **Core Banking** via PostgreSQL) com arquivos de extratos de parceiros externos (Adquirentes/Gateways), identificando automaticamente discrepâncias financeiras, taxas incorretas ou transações não processadas.
 
@@ -121,16 +130,39 @@ python src/main.py
 O robô iniciará em modo daemon (loop infinito), verificando agendamentos a cada 10 segundos (modo demonstração). Os relatórios serão gerados na pasta output/.
 
 ### 📊 Regras de Conciliação (Business Logic)
-O sistema classifica automaticamente cada transação em um dos seguintes status:
 
-Status,Descrição,Ação Recomendada
-CONCILIADO,ID e Valor batem perfeitamente.,Nenhuma (Sucesso).
-DIVERGENCIA VALOR,"O ID existe, mas o valor é diferente.",Auditoria manual (Taxa ou Fraude).
-FALTA NO ARQUIVO,"Transação existe no Banco, mas não no Extrato.",Verificar com a Bandeira/Parceiro.
-NAO NO BANCO,"Transação está no Extrato, mas não no Sistema Interno.",Verificar erro de integração.
+O algoritmo de conciliação classifica cada transação em 4 cenários possíveis, baseando-se no cruzamento entre o ID da transação e o valor monetário.
+
+| Status Gerado | Cenário Identificado | Significado para o Negócio |
+| :--- | :--- | :--- |
+| **CONCILIADO** | `ID` e `Valor` são idênticos nas duas pontas. | Sucesso. O dinheiro que saiu do banco bate com o extrato do parceiro. |
+| **DIVERGENCIA VALOR** | O `ID` existe nos dois lados, mas o `Valor` é diferente. | Alerta de Auditoria. Pode indicar erro de taxa, desconto não aplicado ou fraude. |
+| **FALTA NO ARQUIVO** | O registro existe no Banco (Supabase), mas não no CSV. | Transação interna sem confirmação externa (ex: Time-out na adquirente). |
+| **NAO NO BANCO** | O registro existe no CSV, mas não no Banco. | Transação processada externamente que não foi integrada ao Core Banking. |
+
+## 📂 Estrutura do Projeto
+
+```text
+BankReconciler/
+├── data/
+│   └── extrato_parceiro.csv    # Arquivo de entrada (Simulação de carga externa)
+│
+├── output/                     # Diretório onde os relatórios .xlsx são salvos
+│
+├── src/
+│   └── main.py                 # Código Principal: Contém o ETL, conexão Supabase e Scheduler
+│
+├── tests/
+│   └── test_conciliacao.py     # Testes Unitários: Validação da lógica de divergência (Pytest)
+│
+├── .env                        # Arquivo de configuração de senhas (Ignorado pelo Git)
+├── .gitignore                  # Lista de exclusão do Git (venv, .env, etc.)
+├── requirements.txt            # Lista de dependências do projeto
+└── README.md                   # Documentação técnica
+```
 
 
-### 👤 Autor
-Desenvolvido com foco em boas práticas de Engenharia de Software e Automação Financeira.
+### 👤 Notas do autor
+Desenvolvido com foco em boas práticas de Engenharia de Software e Automação Financeira. ^ ^
 
 [Linkedin](https://www.linkedin.com/in/pedroalves0) | [Email](mailto:pedro.amoura.dev@gmail.com)
